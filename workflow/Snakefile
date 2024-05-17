@@ -1,0 +1,16 @@
+
+
+rule basecall:
+    input:
+    output:
+    params:
+        recursive="--recursive"
+    shell:
+        """
+        
+        """
+
+
+rule all:
+    input:
+        ""
