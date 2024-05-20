@@ -1,16 +1,90 @@
+import os
+import re
 
 
-rule basecall:
+configfile: "config/config.yaml"
+
+
+RGX_DIR_PATTERN = re.compile(r"(?P<run_dir>" + config['run_dir_pattern'] +  r")/(?P<subrun_dir>.*?)/(?P<flowcell>.*?)/pod5")
+
+
+dir_wcs = glob_wildcards(
+    os.path.join(
+        config["input_dir"],
+        *[f"{{{pt}}}" for pt in RGX_DIR_PATTERN.groupindex.keys()],
+        "pod5"
+    )
+)
+
+
+wildcard_constraints:
+    run_dir = "|".join(dir_wcs.run_dir),
+    subrun_dir = "|".join(dir_wcs.subrun_dir),
+    flowcell = "|".join(dir_wcs.flowcell)
+
+
+# Check status of run using snakemake --summary. If non-zero, update config.
+# Then change params and output to include previous file
+rule dorado_basecaller:
     input:
+        dorado_bin=config["dorado"]["bin"],
+        pod5_directory=os.path.join(
+            config["input_dir"],
+            "{run_dir}",
+            "{subrun_dir}",
+            "{flowcell}",
+            "pod5"
+        )
     output:
+        os.path.join(
+            config["input_dir"],
+            "{run_dir}",
+            "{subrun_dir}",
+            "{flowcell}",
+            "pod5",
+            config["run_output_dir"],
+            "{run_dir}.bam"
+        )
     params:
-        recursive="--recursive"
+        rebasecall=config["rebasecall"],
+        recursive="--recursive",
+        modifications=config["dorado"]["modifications"],
+        min_qscore=config["dorado"]["min_qscore"],
+    log:
+        "logs/dorado_basecaller/{run_dir}_{subrun_dir}_{flowcell}.log"
+    benchmark:
+        "benchmarks/dorado_basecaller/{run_dir}_{subrun_dir}_{flowcell}.tsv"
     shell:
         """
-        
+        if [ "{params.rebasecall}" == "True" ]; then
+            {input.dorado_bin} basecall {params.recursive} {input.pod5_directory} --resume-from $input_bam > /tmp/{output} 2> {log}
+            mv /tmp/{output} {output}
+        else
+            {input.dorado_bin} basecall {params.recursive} {input.pod5_directory} > {output} 2> {log}
+        fi
         """
+
+
+# rule dorado_summary:
+#     input:
+#         dorado_bin=config["dorado_bin"],
+#         basecalled_reads=rules.dorado_basecaller.output
+#     output:
+#         "summary.tsv"
+#     shell:
+#         """
+#         {input.dorado_bin} summary {input.basecalled_reads} > {output}
+#         """
 
 
 rule all:
     input:
-        ""
+        expand(
+            rules.dorado_basecaller.output,
+            zip,
+            run_dir=dir_wcs.run_dir,
+            subrun_dir=dir_wcs.subrun_dir,
+            flowcell=dir_wcs.flowcell
+        )
+    default_target:
+        True
