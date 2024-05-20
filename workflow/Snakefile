@@ -5,26 +5,36 @@ import re
 configfile: "config/config.yaml"
 
 
-RGX_DIR_PATTERN = re.compile(r"(?P<run_dir>" + config['run_dir_pattern'] +  r")/(?P<subrun_dir>.*?)/(?P<flowcell>.*?)/pod5")
+# {input_dir}/{run}/{subrun}/{flowcell}/pod5
+RGX_DIR_PATTERN = re.compile((
+    f'{config["input_dir"]}/' + 
+    r"(?P<run_dir>" +
+    config['run_dir_pattern'] + 
+    r")/(?P<subrun_dir>[^/]+)/(?P<flowcell>[^/]+)/pod5$"
+))
+# Check if need to rebasecall on failed Snakemake run.
 REBASECALL = config.get("rebasecall", False)
 
+# Walk through input directory check that regex pattern matches
+RUN_DIRS, SUBRUN_DIRS, FLOWCELL_DIRS = [], [], []
+for root, _, _ in os.walk(config["input_dir"]):
+    abs_path = os.path.join(config["input_dir"], root)
+    mtch = re.search(RGX_DIR_PATTERN, abs_path)
+    if mtch:
+        run_dir, subrun_dir, flowcell_dir = mtch.groups()
+        RUN_DIRS.append(run_dir)
+        SUBRUN_DIRS.append(subrun_dir)
+        FLOWCELL_DIRS.append(flowcell_dir)
 
-dir_wcs = glob_wildcards(
-    os.path.join(
-        config["input_dir"],
-        *[f"{{{pt}}}" for pt in RGX_DIR_PATTERN.groupindex.keys()],
-        "pod5"
-    )
-)
 
 wildcard_constraints:
-    run_dir = "|".join(dir_wcs.run_dir),
-    subrun_dir = "|".join(dir_wcs.subrun_dir),
-    flowcell = "|".join(dir_wcs.flowcell)
+    run_dir = "|".join(RUN_DIRS),
+    subrun_dir = "|".join(SUBRUN_DIRS),
+    flowcell = "|".join(FLOWCELL_DIRS)
 
 
-# Check status of run using snakemake --summary. If non-zero, update config.
-# Then change params and output to include previous file
+# Check status of run by doing dry-run. If non-zero and error msg contaings IncompleteOutputException, update config wiht rebasecall.
+# Then change params and output to include previous file.
 rule dorado_basecaller:
     input:
         dorado_bin=config["dorado"]["bin"],
@@ -76,27 +86,17 @@ rule dorado_basecaller:
                 {params.model},{params.modifications} \
                 {params.recursive} \
                 {input.pod5_directory} \
+                --min-qscore {params.min_qscore} \
                 --resume-from {output} > $tmp_file 2> {log}
             mv $tmp_file {output}
         else
             {input.dorado_bin} basecaller \
                 {params.model},{params.modifications} \
                 {params.recursive} \
+                --min-qscore {params.min_qscore} \
                 {input.pod5_directory} > {output} 2> {log}
         fi
         """
-
-
-# rule dorado_summary:
-#     input:
-#         dorado_bin=config["dorado_bin"],
-#         basecalled_reads=rules.dorado_basecaller.output
-#     output:
-#         "summary.tsv"
-#     shell:
-#         """
-#         {input.dorado_bin} summary {input.basecalled_reads} > {output}
-#         """
 
 
 rule all:
@@ -104,9 +104,9 @@ rule all:
         expand(
             rules.dorado_basecaller.output,
             zip,
-            run_dir=dir_wcs.run_dir,
-            subrun_dir=dir_wcs.subrun_dir,
-            flowcell=dir_wcs.flowcell
+            run_dir=RUN_DIRS,
+            subrun_dir=SUBRUN_DIRS,
+            flowcell=FLOWCELL_DIRS
         )
     default_target:
         True

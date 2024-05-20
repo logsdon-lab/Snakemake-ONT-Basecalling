@@ -9,8 +9,8 @@ ret=$?
 # Incomplete basecalling. Redo.
 if [[ $ret -eq 0 ]]; then
     echo "Incomplete files detected. Redoing basecalling."
-    snakemake -c4 -p --config rebasecall=True --rerun-incomplete $@
+    snakemake -p --config rebasecall=True --rerun-incomplete $@
 else
     echo "Basecalling reads."
-    snakemake -c4 -p $@
+    snakemake -p $@
 fi
