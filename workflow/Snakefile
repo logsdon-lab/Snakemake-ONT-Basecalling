@@ -6,6 +6,7 @@ configfile: "config/config.yaml"
 
 
 RGX_DIR_PATTERN = re.compile(r"(?P<run_dir>" + config['run_dir_pattern'] +  r")/(?P<subrun_dir>.*?)/(?P<flowcell>.*?)/pod5")
+REBASECALL = config.get("rebasecall", False)
 
 
 dir_wcs = glob_wildcards(
@@ -15,7 +16,6 @@ dir_wcs = glob_wildcards(
         "pod5"
     )
 )
-
 
 wildcard_constraints:
     run_dir = "|".join(dir_wcs.run_dir),
@@ -46,8 +46,17 @@ rule dorado_basecaller:
             "{run_dir}.bam"
         )
     params:
-        rebasecall=config["rebasecall"],
+        rebasecall=REBASECALL,
+        rebasecall_tmp_dir=os.path.join(
+            "/tmp",
+            "{run_dir}",
+            "{subrun_dir}",
+            "{flowcell}",
+            "pod5",
+            config["run_output_dir"],
+        ),
         recursive="--recursive",
+        model=config["dorado"]["model"],
         modifications=config["dorado"]["modifications"],
         min_qscore=config["dorado"]["min_qscore"],
     log:
@@ -57,10 +66,23 @@ rule dorado_basecaller:
     shell:
         """
         if [ "{params.rebasecall}" == "True" ]; then
-            {input.dorado_bin} basecall {params.recursive} {input.pod5_directory} --resume-from $input_bam > /tmp/{output} 2> {log}
-            mv /tmp/{output} {output}
+            mkdir -p {params.rebasecall_tmp_dir}
+            # Create empty file if it doesn't exist
+            if ! [[ -f {output} ]]; then
+                touch {output}
+            fi
+            tmp_file="{params.rebasecall_tmp_dir}/{wildcards.run_dir}.bam"
+            {input.dorado_bin} basecaller \
+                {params.model},{params.modifications} \
+                {params.recursive} \
+                {input.pod5_directory} \
+                --resume-from {output} > $tmp_file 2> {log}
+            mv $tmp_file {output}
         else
-            {input.dorado_bin} basecall {params.recursive} {input.pod5_directory} > {output} 2> {log}
+            {input.dorado_bin} basecaller \
+                {params.model},{params.modifications} \
+                {params.recursive} \
+                {input.pod5_directory} > {output} 2> {log}
         fi
         """
 
