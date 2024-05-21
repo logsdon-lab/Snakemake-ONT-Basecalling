@@ -3,7 +3,8 @@ input_dir: "/data"
 run_dir_pattern: "20[2-9][0-9]_[0-9]{2}_[0-9]{2}[^/]+"
 # Output dir with {input_dir}/{run_dir}/*/*/pod5/
 run_output_dir: "basecalling"
-
+# Wait time in seconds to check that directory does not have new files.
+wait_time: 3
 # Dorado settings.
 dorado:
   bin: "/home/prom/bin/dorado"
