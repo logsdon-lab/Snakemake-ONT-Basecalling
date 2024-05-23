@@ -51,7 +51,8 @@ def get_run_dir_wcs(rgx_dir_pattern: str) -> tuple[list[str], list[str], list[st
 RUN_DIRS, SUBRUN_DIRS, FLOWCELL_DIRS = get_run_dir_wcs(rgx_dir_pattern=RGX_DIR_PATTERN)
 
 # Split devices by number of cores provided.
-DEVICES = round(4 / workflow.resource_settings.cores)
+NUM_CORES = workflow.resource_settings.cores if workflow.resource_settings.cores else 1
+DEVICES = round(4 / NUM_CORES)
 
 
 wildcard_constraints:
