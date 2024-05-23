@@ -18,6 +18,14 @@ RGX_DIR_PATTERN = re.compile(
 )
 # Check if need to rebasecall on failed Snakemake run.
 REBASECALL = config.get("rebasecall", False)
+OUTPUT_DIR = os.path.join(
+    config["input_dir"],
+    "{run_dir}",
+    "{subrun_dir}",
+    "{flowcell}",
+    "pod5",
+    config["run_output_dir"]
+)
 
 
 def get_run_dir_wcs(rgx_dir_pattern: str) -> tuple[list[str], list[str], list[str]]:
@@ -70,15 +78,16 @@ rule dorado_basecaller:
             config["input_dir"], "{run_dir}", "{subrun_dir}", "{flowcell}", "pod5"
         ),
     output:
-        os.path.join(
-            config["input_dir"],
-            "{run_dir}",
-            "{subrun_dir}",
-            "{flowcell}",
-            "pod5",
-            config["run_output_dir"],
+        reads=os.path.join(
+            OUTPUT_DIR,
             "{run_dir}.bam",
         ),
+        marker_file=touch(
+            os.path.join(
+                OUTPUT_DIR,
+                "basecalling.done"
+            )
+        )
     resources:
         devices=DEVICES,
     params:
@@ -104,8 +113,8 @@ rule dorado_basecaller:
         if [ "{params.rebasecall}" == "True" ]; then
             mkdir -p {params.rebasecall_tmp_dir}
             # Create empty file if it doesn't exist
-            if ! [[ -f {output} ]]; then
-                touch {output}
+            if ! [[ -f {output.reads} ]]; then
+                touch {output.reads}
             fi
             tmp_file="{params.rebasecall_tmp_dir}/{wildcards.run_dir}.bam"
             {input.dorado_bin} basecaller \
@@ -114,15 +123,15 @@ rule dorado_basecaller:
                 {input.pod5_directory} \
                 --min-qscore {params.min_qscore} \
                 --device cuda:{resources.devices} \
-                --resume-from {output} > $tmp_file 2> {log}
-            mv $tmp_file {output}
+                --resume-from {output.reads} > $tmp_file 2> {log}
+            mv $tmp_file {output.reads}
         else
             {input.dorado_bin} basecaller \
                 {params.model},{params.modifications} \
                 {params.recursive} \
                 --min-qscore {params.min_qscore} \
                 --device cuda:{resources.devices} \
-                {input.pod5_directory} > {output} 2> {log}
+                {input.pod5_directory} > {output.reads} 2> {log}
         fi
         """
 
