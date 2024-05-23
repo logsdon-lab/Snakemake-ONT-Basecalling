@@ -3,16 +3,19 @@ import re
 import sys
 import time
 
+
 configfile: "config/config.yaml"
 
 
 # {input_dir}/{run}/{subrun}/{flowcell}/pod5
-RGX_DIR_PATTERN = re.compile((
-    f'{config["input_dir"]}/' + 
-    r"(?P<run_dir>" +
-    config['run_dir_pattern'] + 
-    r")/(?P<subrun_dir>[^/]+)/(?P<flowcell>[^/]+)/pod5$"
-))
+RGX_DIR_PATTERN = re.compile(
+    (
+        f'{config["input_dir"]}/'
+        + r"(?P<run_dir>"
+        + config["run_dir_pattern"]
+        + r")/(?P<subrun_dir>[^/]+)/(?P<flowcell>[^/]+)/pod5$"
+    )
+)
 # Check if need to rebasecall on failed Snakemake run.
 REBASECALL = config.get("rebasecall", False)
 
@@ -30,9 +33,9 @@ def get_run_dir_wcs(rgx_dir_pattern: str) -> tuple[list[str], list[str], list[st
 
         contains_summary_files = any(
             file.startswith("sequencing_summary")
-            for file in os.listdir(os.path.join(
-                config["input_dir"], run_dir, subrun_dir, flowcell_dir
-            ))
+            for file in os.listdir(
+                os.path.join(config["input_dir"], run_dir, subrun_dir, flowcell_dir)
+            )
         )
         # Skip directories that are still sequencing.
         if not contains_summary_files:
@@ -47,11 +50,14 @@ def get_run_dir_wcs(rgx_dir_pattern: str) -> tuple[list[str], list[str], list[st
 
 RUN_DIRS, SUBRUN_DIRS, FLOWCELL_DIRS = get_run_dir_wcs(rgx_dir_pattern=RGX_DIR_PATTERN)
 
+# Split devices by number of cores provided.
+DEVICES = round(4 / workflow.resource_settings.cores)
+
 
 wildcard_constraints:
-    run_dir = "|".join(RUN_DIRS),
-    subrun_dir = "|".join(SUBRUN_DIRS),
-    flowcell = "|".join(FLOWCELL_DIRS)
+    run_dir="|".join(RUN_DIRS),
+    subrun_dir="|".join(SUBRUN_DIRS),
+    flowcell="|".join(FLOWCELL_DIRS),
 
 
 # Check status of run by doing dry-run. If non-zero and error msg contaings IncompleteOutputException, update config wiht rebasecall.
@@ -60,12 +66,8 @@ rule dorado_basecaller:
     input:
         dorado_bin=config["dorado"]["bin"],
         pod5_directory=os.path.join(
-            config["input_dir"],
-            "{run_dir}",
-            "{subrun_dir}",
-            "{flowcell}",
-            "pod5"
-        )
+            config["input_dir"], "{run_dir}", "{subrun_dir}", "{flowcell}", "pod5"
+        ),
     output:
         os.path.join(
             config["input_dir"],
@@ -74,8 +76,10 @@ rule dorado_basecaller:
             "{flowcell}",
             "pod5",
             config["run_output_dir"],
-            "{run_dir}.bam"
-        )
+            "{run_dir}.bam",
+        ),
+    resources:
+        devices=DEVICES,
     params:
         rebasecall=REBASECALL,
         rebasecall_tmp_dir=os.path.join(
@@ -91,7 +95,7 @@ rule dorado_basecaller:
         modifications=config["dorado"]["modifications"],
         min_qscore=config["dorado"]["min_qscore"],
     log:
-        "logs/dorado_basecaller/{run_dir}_{subrun_dir}_{flowcell}.log"
+        "logs/dorado_basecaller/{run_dir}_{subrun_dir}_{flowcell}.log",
     benchmark:
         "benchmarks/dorado_basecaller/{run_dir}_{subrun_dir}_{flowcell}.tsv"
     shell:
@@ -108,6 +112,7 @@ rule dorado_basecaller:
                 {params.recursive} \
                 {input.pod5_directory} \
                 --min-qscore {params.min_qscore} \
+                --device cuda:{resources.devices} \
                 --resume-from {output} > $tmp_file 2> {log}
             mv $tmp_file {output}
         else
@@ -115,6 +120,7 @@ rule dorado_basecaller:
                 {params.model},{params.modifications} \
                 {params.recursive} \
                 --min-qscore {params.min_qscore} \
+                --device cuda:{resources.devices} \
                 {input.pod5_directory} > {output} 2> {log}
         fi
         """
@@ -127,7 +133,6 @@ rule all:
             zip,
             run_dir=RUN_DIRS,
             subrun_dir=SUBRUN_DIRS,
-            flowcell=FLOWCELL_DIRS
-        )
-    default_target:
-        True
+            flowcell=FLOWCELL_DIRS,
+        ),
+    default_target: True

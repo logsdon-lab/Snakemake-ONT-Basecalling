@@ -1,3 +1,4 @@
 .snakemake
 benchmarks*/
 logs*/
+.temp_dorado*/
