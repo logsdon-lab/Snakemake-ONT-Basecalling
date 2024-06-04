@@ -60,7 +60,10 @@ RUN_DIRS, SUBRUN_DIRS, FLOWCELL_DIRS = get_run_dir_wcs(rgx_dir_pattern=RGX_DIR_P
 
 # Split devices by number of cores provided.
 NUM_CORES = workflow.resource_settings.cores if workflow.resource_settings.cores else 1
-DEVICES = round(4 / NUM_CORES)
+if NUM_CORES >= 4:
+    DEVICES = 1
+else:    
+    DEVICES = round(4 / NUM_CORES)
 
 
 wildcard_constraints:
@@ -104,6 +107,9 @@ rule dorado_basecaller:
         model=config["dorado"]["model"],
         modifications=config["dorado"]["modifications"],
         min_qscore=config["dorado"]["min_qscore"],
+    threads:
+        # Only allow up to four processes at a time.
+        NUM_CORES / 4
     log:
         "logs/dorado_basecaller/{run_dir}_{subrun_dir}_{flowcell}.log",
     benchmark:
