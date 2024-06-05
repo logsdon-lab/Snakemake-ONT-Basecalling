@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import time
+import shutil
 
 
 configfile: "config/config.yaml"
@@ -16,15 +17,43 @@ RGX_DIR_PATTERN = re.compile(
         + r")/(?P<subrun_dir>[^/]+)/(?P<flowcell>[^/]+)/pod5$"
     )
 )
+DRY_RUN = any("-n" in arg for arg in sys.argv[1:])
+
 # Check if need to rebasecall on failed Snakemake run.
-REBASECALL = config.get("rebasecall", False)
+INCOMPLETE_FILES = {}
+if config.get("incomplete_files"):
+    with open(config["incomplete_files"], "rt") as fh:
+        # Move incomplete files to /tmp. Snakemake deletes on new run otherwise.
+        for l in fh.readlines():
+            abs_path = l.strip()
+            path_comp = abs_path.split("/")
+            tmp_dir = os.path.join("/", "/".join(["tmp", *abs_path.split("/")[2:-1]]))
+            new_abs_path = os.path.join(tmp_dir, path_comp[-1])
+            os.makedirs(tmp_dir, exist_ok=True)
+            INCOMPLETE_FILES[abs_path] = new_abs_path
+            # Move files.
+            if DRY_RUN:
+                continue
+            try:
+                shutil.move(abs_path, new_abs_path)
+            except FileNotFoundError:
+                pass
+
+    print("Incomplete files found:", list(INCOMPLETE_FILES.keys()), file=sys.stderr)
+
+# breakpoint()
+
 OUTPUT_DIR = os.path.join(
     config["input_dir"],
     "{run_dir}",
     "{subrun_dir}",
     "{flowcell}",
     "pod5",
-    config["run_output_dir"]
+    config["run_output_dir"],
+)
+READS_FILE = os.path.join(
+    OUTPUT_DIR,
+    "{run_dir}.bam",
 )
 
 
@@ -56,14 +85,13 @@ def get_run_dir_wcs(rgx_dir_pattern: str) -> tuple[list[str], list[str], list[st
     return run_dirs, subrun_dirs, flowcell_dirs
 
 
-RUN_DIRS, SUBRUN_DIRS, FLOWCELL_DIRS = get_run_dir_wcs(rgx_dir_pattern=RGX_DIR_PATTERN)
+def expand_path(wc, path: str):
+    return expand(
+        path, zip, run_dir=wc.run_dir, subrun_dir=wc.subrun_dir, flowcell=wc.flowcell
+    )[0]
 
-# Split devices by number of cores provided.
-NUM_CORES = workflow.resource_settings.cores if workflow.resource_settings.cores else 1
-if NUM_CORES >= 4:
-    DEVICES = 1
-else:    
-    DEVICES = round(4 / NUM_CORES)
+
+RUN_DIRS, SUBRUN_DIRS, FLOWCELL_DIRS = get_run_dir_wcs(rgx_dir_pattern=RGX_DIR_PATTERN)
 
 
 wildcard_constraints:
@@ -80,65 +108,42 @@ rule dorado_basecaller:
         pod5_directory=os.path.join(
             config["input_dir"], "{run_dir}", "{subrun_dir}", "{flowcell}", "pod5"
         ),
+        rebasecall_file=lambda wc: (
+            INCOMPLETE_FILES[expand_path(wc, READS_FILE)]
+            if INCOMPLETE_FILES.get(expand_path(wc, READS_FILE))
+            else []
+        ),
     output:
         reads=os.path.join(
             OUTPUT_DIR,
             "{run_dir}.bam",
         ),
-        marker_file=touch(
-            os.path.join(
-                OUTPUT_DIR,
-                "basecalling.done"
-            )
-        )
+        marker_file=touch(os.path.join(OUTPUT_DIR, "basecalling.done")),
     resources:
-        devices=DEVICES,
+        devices="all",
     params:
-        rebasecall=REBASECALL,
-        rebasecall_tmp_dir=os.path.join(
-            "/tmp",
-            "{run_dir}",
-            "{subrun_dir}",
-            "{flowcell}",
-            "pod5",
-            config["run_output_dir"],
+        rebasecall_file=lambda wc, input: (
+            f"--resume-from {input.rebasecall_file}" if input.rebasecall_file else ""
         ),
         recursive="--recursive",
         model=config["dorado"]["model"],
         modifications=config["dorado"]["modifications"],
         min_qscore=config["dorado"]["min_qscore"],
-    threads:
-        # Only allow up to four processes at a time.
-        NUM_CORES / 4
+    # Only allow up to one process at a time.
+    threads: workflow.cores
     log:
         "logs/dorado_basecaller/{run_dir}_{subrun_dir}_{flowcell}.log",
     benchmark:
         "benchmarks/dorado_basecaller/{run_dir}_{subrun_dir}_{flowcell}.tsv"
     shell:
         """
-        if [ "{params.rebasecall}" == "True" ]; then
-            mkdir -p {params.rebasecall_tmp_dir}
-            # Create empty file if it doesn't exist
-            if ! [[ -f {output.reads} ]]; then
-                touch {output.reads}
-            fi
-            tmp_file="{params.rebasecall_tmp_dir}/{wildcards.run_dir}.bam"
-            {input.dorado_bin} basecaller \
-                {params.model},{params.modifications} \
-                {params.recursive} \
-                {input.pod5_directory} \
-                --min-qscore {params.min_qscore} \
-                --device cuda:{resources.devices} \
-                --resume-from {output.reads} > $tmp_file 2> {log}
-            mv $tmp_file {output.reads}
-        else
-            {input.dorado_bin} basecaller \
-                {params.model},{params.modifications} \
-                {params.recursive} \
-                --min-qscore {params.min_qscore} \
-                --device cuda:{resources.devices} \
-                {input.pod5_directory} > {output.reads} 2> {log}
-        fi
+        {input.dorado_bin} basecaller \
+            {params.model},{params.modifications} \
+            {params.recursive} \
+            --min-qscore {params.min_qscore} \
+            --device cuda:{resources.devices} \
+            {params.rebasecall_file} \
+            {input.pod5_directory} > {output.reads} 2> {log}
         """
 
 
