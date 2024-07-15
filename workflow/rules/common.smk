@@ -16,7 +16,8 @@ def move_incomplete_files(
             os.makedirs(tmp_dir, exist_ok=True)
             incomplete_file_paths[abs_path] = new_abs_path
             # Move files.
-            if is_dry_run:
+            # If dry run or is not a bam file (basecalled file), continue.
+            if is_dry_run or not abs_path.endswith(".bam"):
                 continue
             try:
                 shutil.move(abs_path, new_abs_path)

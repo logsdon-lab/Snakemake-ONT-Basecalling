@@ -8,15 +8,7 @@ RGX_DIR_PATTERN = re.compile(
     )
 )
 
-OUTPUT_DIR = os.path.join(
-    config["input_dir"],
-    "{run_dir}",
-    "{subrun_dir}",
-    "{flowcell}",
-    "pod5",
-    config["run_output_dir"],
-)
-
+OUTPUT_DIR = config["run_output_dir"]
 READS_FILE = os.path.join(
     OUTPUT_DIR,
     "{run_dir}.bam",

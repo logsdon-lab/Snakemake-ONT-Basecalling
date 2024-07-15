@@ -72,7 +72,46 @@ rule dorado_basecaller:
         """
 
 
-# TODO: Convert to fastq.gz and then error correct.
+rule convert_to_fastq:
+    input:
+        bam=rules.dorado_basecaller.output.reads,
+    output:
+        fq=temp(os.path.join(OUTPUT_DIR, "{run_dir}.fq.gz")),
+    params:
+        preserve_all_tags="-T '*'",
+    threads: workflow.cores
+    log:
+        "logs/convert_to_fastq/{run_dir}_{subrun_dir}_{flowcell}.log",
+    conda:
+        "envs/tools.yaml"
+    shell:
+        """
+        {{ samtools fastq {params.preserve_all_tags} -@ {threads} {input.bam} | \
+        bgzip -@ {threads};}} > {output} 2> {log}
+        """
+
+
+rule dorado_correct:
+    input:
+        dorado_bin=config["dorado"]["bin"],
+        fq=rules.convert_to_fastq.output,
+    output:
+        corrected_fa=os.path.join(OUTPUT_DIR, "{run_dir}.fa.gz"),
+        marker_file=touch(os.path.join(OUTPUT_DIR, "correction.done")),
+    resources:
+        devices="all",
+    threads: workflow.cores
+    log:
+        "logs/dorado_correct/{run_dir}_{subrun_dir}_{flowcell}.log",
+    conda:
+        "envs/tools.yaml"
+    shell:
+        """
+        {{ {input.dorado_bin} correct \
+        --threads {threads} \
+        --devices cuda:{resources.devices} {input.fq} | \
+        bgzip -@ {threads} ;}} > {output.corrected_fa} 2> {log}
+        """
 
 
 rule all:
@@ -83,5 +122,16 @@ rule all:
             run_dir=RUN_DIRS,
             subrun_dir=SUBRUN_DIRS,
             flowcell=FLOWCELL_DIRS,
+        ),
+        (
+            expand(
+                rules.dorado_correct.output,
+                zip,
+                run_dir=RUN_DIRS,
+                subrun_dir=SUBRUN_DIRS,
+                flowcell=FLOWCELL_DIRS,
+            )
+            if config["dorado"]["correct"]
+            else []
         ),
     default_target: True

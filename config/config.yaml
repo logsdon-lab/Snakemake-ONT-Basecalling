@@ -2,7 +2,8 @@ input_dir: "/data"
 # Run dir pattern with {input_dir}.
 run_dir_pattern: "20[2-9][0-9]{5}[^/]+"
 # Output dir with {input_dir}/{run_dir}/*/*/pod5/
-run_output_dir: "basecalling"
+# Can use {run_dir}, {subrun_dir}, and {flowcell} wildcards.
+run_output_dir: "/data/{run_dir}/{subrun_dir}/{flowcell}/pod5/basecalling"
 
 # Dorado settings.
 dorado:
@@ -10,3 +11,4 @@ dorado:
   model: "sup"
   min_qscore: 10
   modifications: "5mC_5hmC"
+  correct: true
