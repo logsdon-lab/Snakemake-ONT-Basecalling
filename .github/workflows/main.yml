@@ -1,0 +1,16 @@
+ame: CI
+
+on: [push, pull_request]
+
+jobs:
+  run-workflow:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: snakemake
+      uses: snakemake/snakemake-github-action@v1.25.1
+      with:
+        directory: .
+        snakefile: workflow/Snakefile
+        args: "--configfile test/config/config.yaml -c 1 -np"

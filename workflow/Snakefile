@@ -8,89 +8,14 @@ import shutil
 configfile: "config/config.yaml"
 
 
-# {input_dir}/{run}/{subrun}/{flowcell}/pod5
-RGX_DIR_PATTERN = re.compile(
-    (
-        f'{config["input_dir"]}/'
-        + r"(?P<run_dir>"
-        + config["run_dir_pattern"]
-        + r")/(?P<subrun_dir>[^/]+)/(?P<flowcell>[^/]+)/pod5$"
-    )
-)
+include: "rules/patterns.smk"
+include: "rules/common.smk"
+
+
 DRY_RUN = any("-n" in arg for arg in sys.argv[1:])
-
-# Check if need to rebasecall on failed Snakemake run.
-INCOMPLETE_FILES = {}
-if config.get("incomplete_files"):
-    with open(config["incomplete_files"], "rt") as fh:
-        # Move incomplete files to /tmp. Snakemake deletes on new run otherwise.
-        for l in fh.readlines():
-            abs_path = l.strip()
-            path_comp = abs_path.split("/")
-            tmp_dir = os.path.join("/", "/".join(["tmp", *abs_path.split("/")[2:-1]]))
-            new_abs_path = os.path.join(tmp_dir, path_comp[-1])
-            os.makedirs(tmp_dir, exist_ok=True)
-            INCOMPLETE_FILES[abs_path] = new_abs_path
-            # Move files.
-            if DRY_RUN:
-                continue
-            try:
-                shutil.move(abs_path, new_abs_path)
-            except FileNotFoundError:
-                pass
-
-    print("Incomplete files found:", list(INCOMPLETE_FILES.keys()), file=sys.stderr)
-
-# breakpoint()
-
-OUTPUT_DIR = os.path.join(
-    config["input_dir"],
-    "{run_dir}",
-    "{subrun_dir}",
-    "{flowcell}",
-    "pod5",
-    config["run_output_dir"],
+INCOMPLETE_FILES = move_incomplete_files(
+    config.get("incomplete_files"), is_dry_run=DRY_RUN
 )
-READS_FILE = os.path.join(
-    OUTPUT_DIR,
-    "{run_dir}.bam",
-)
-
-
-def get_run_dir_wcs(rgx_dir_pattern: str) -> tuple[list[str], list[str], list[str]]:
-    # Walk through input directory check that regex pattern matches
-    run_dirs, subrun_dirs, flowcell_dirs = [], [], []
-    for root, _, _ in os.walk(config["input_dir"]):
-        abs_path = os.path.join(config["input_dir"], root)
-        mtch = re.search(rgx_dir_pattern, abs_path)
-        if not mtch:
-            continue
-
-        run_dir, subrun_dir, flowcell_dir = mtch.groups()
-
-        contains_summary_files = any(
-            file.startswith("sequencing_summary")
-            for file in os.listdir(
-                os.path.join(config["input_dir"], run_dir, subrun_dir, flowcell_dir)
-            )
-        )
-        # Skip directories that are still sequencing.
-        if not contains_summary_files:
-            continue
-
-        run_dirs.append(run_dir)
-        subrun_dirs.append(subrun_dir)
-        flowcell_dirs.append(flowcell_dir)
-
-    return run_dirs, subrun_dirs, flowcell_dirs
-
-
-def expand_path(wc, path: str):
-    return expand(
-        path, zip, run_dir=wc.run_dir, subrun_dir=wc.subrun_dir, flowcell=wc.flowcell
-    )[0]
-
-
 RUN_DIRS, SUBRUN_DIRS, FLOWCELL_DIRS = get_run_dir_wcs(rgx_dir_pattern=RGX_DIR_PATTERN)
 
 
@@ -145,6 +70,9 @@ rule dorado_basecaller:
             {params.rebasecall_file} \
             {input.pod5_directory} > {output.reads} 2> {log}
         """
+
+
+# TODO: Convert to fastq.gz and then error correct.
 
 
 rule all:
