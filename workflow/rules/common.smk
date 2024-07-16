@@ -24,7 +24,9 @@ def move_incomplete_files(
             except FileNotFoundError:
                 pass
 
-    print("Incomplete files found:", list(INCOMPLETE_FILES.keys()), file=sys.stderr)
+    print(
+        "Incomplete files found:", list(incomplete_file_paths.keys()), file=sys.stderr
+    )
 
     return incomplete_file_paths
 
