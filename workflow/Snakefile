@@ -17,6 +17,7 @@ INCOMPLETE_FILES = move_incomplete_files(
     config.get("incomplete_files"), is_dry_run=DRY_RUN
 )
 RUN_DIRS, SUBRUN_DIRS, FLOWCELL_DIRS = get_run_dir_wcs(rgx_dir_pattern=RGX_DIR_PATTERN)
+DEVICES = config["dorado"].get("devices", "all")
 
 
 wildcard_constraints:
@@ -45,7 +46,7 @@ rule dorado_basecaller:
         ),
         marker_file=touch(os.path.join(OUTPUT_DIR, "basecalling.done")),
     resources:
-        devices="all",
+        devices=DEVICES,
     params:
         rebasecall_file=lambda wc, input: (
             f"--resume-from {input.rebasecall_file}" if input.rebasecall_file else ""
@@ -99,7 +100,7 @@ rule dorado_correct:
         corrected_fa=os.path.join(OUTPUT_DIR, "{run_dir}.fa.gz"),
         marker_file=touch(os.path.join(OUTPUT_DIR, "correction.done")),
     resources:
-        devices="all",
+        devices=DEVICES,
     threads: workflow.cores
     log:
         "logs/dorado_correct/{run_dir}_{subrun_dir}_{flowcell}.log",

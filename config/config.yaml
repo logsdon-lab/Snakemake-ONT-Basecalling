@@ -11,4 +11,5 @@ dorado:
   model: "sup"
   min_qscore: 10
   modifications: "5mC_5hmC"
-  correct: true
+  devices: "all"
+  correct: false
