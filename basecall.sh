@@ -13,7 +13,7 @@ if [ $ret -eq 0 ] || [ -f "${incomplete_files_list}" ]; then
     echo "Incomplete files detected. Redoing basecalling."
     if [ ! -f "${incomplete_files_list}" ]; then
         # Generate list of incomplete files.
-        grep -P "/(.*?)" <(snakemake -np -c 1 $@ 2>&1 || true) > $incomplete_files_list
+        grep -P "^/(.*?)" <(snakemake -np -c 1 $@ 2>&1 || true) > $incomplete_files_list
     fi
 
     # Then pass as configuration.
