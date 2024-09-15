@@ -1,6 +1,10 @@
 def move_incomplete_files(
     incomplete_files: str | None, *, is_dry_run: bool
 ) -> dict[str, str]:
+    # Exit if snakemake directory is locked
+    if os.listdir(".snakemake/locks"):
+        return {}
+
     # Check if need to rebasecall on failed Snakemake run.
     incomplete_file_paths = {}
     if not incomplete_files:
