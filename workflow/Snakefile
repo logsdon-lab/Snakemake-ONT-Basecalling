@@ -36,7 +36,7 @@ rule dorado_basecaller:
         ),
         rebasecall_file=lambda wc: (
             INCOMPLETE_FILES[expand_path(wc, READS_FILE)]
-            if INCOMPLETE_FILES.get(expand_path(wc, READS_FILE))
+            if INCOMPLETE_FILES.get(expand_path(wc, READS_FILE)) and not DRY_RUN
             else []
         ),
     output:
@@ -48,8 +48,8 @@ rule dorado_basecaller:
     resources:
         devices=DEVICES,
     params:
-        rebasecall_file=lambda wc, input: (
-            f"--resume-from {input.rebasecall_file}" if input.rebasecall_file else ""
+        rebasecall_file=lambda wc, input: get_rebasecall_params(
+            wc, input, INCOMPLETE_FILES, dry_run=DRY_RUN
         ),
         recursive="--recursive",
         model=config["dorado"]["model"],

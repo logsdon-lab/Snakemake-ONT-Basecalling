@@ -12,20 +12,42 @@ def move_incomplete_files(
     incomplete_file_paths = {}
     if not incomplete_files:
         return incomplete_file_paths
+    try:
+        fh = open(config["incomplete_files"], "rt")
+    except FileNotFoundError:
+        return incomplete_file_paths
 
-    with open(config["incomplete_files"], "rt") as fh:
-        # Move incomplete files to /tmp. Snakemake deletes on new run otherwise.
-        for l in fh.readlines():
-            abs_path = l.strip()
-            path_comp = abs_path.split("/")
-            tmp_dir = os.path.join("/", "/".join(["tmp", *abs_path.split("/")[2:-1]]))
-            new_abs_path = os.path.join(tmp_dir, path_comp[-1])
-            os.makedirs(tmp_dir, exist_ok=True)
-            incomplete_file_paths[abs_path] = new_abs_path
-            # Move files.
-            # If dry run or is not a bam file (basecalled file), continue.
-            if is_dry_run or not abs_path.endswith(".bam"):
-                continue
+    # Move incomplete files to /tmp. Snakemake deletes on new run otherwise.
+    for l in fh.readlines():
+        abs_path = l.strip()
+        path_comp = abs_path.split("/")
+        tmp_dir = os.path.join("/", "/".join(["tmp", *abs_path.split("/")[2:-1]]))
+        new_abs_path = os.path.join(tmp_dir, path_comp[-1])
+        os.makedirs(tmp_dir, exist_ok=True)
+        incomplete_file_paths[abs_path] = new_abs_path
+        # Move files.
+        # If dry run or is not a bam file (basecalled file), continue.
+        if not abs_path.endswith(".bam"):
+            continue
+
+        # Only move file if larger. Prevents overwrite in case of premature crash.
+        try:
+            bamfile_size = os.path.getsize(abs_path)
+        except FileNotFoundError:
+            bamfile_size = 0
+        try:
+            new_bamfile_size = os.path.getsize(new_abs_path)
+        except FileNotFoundError:
+            new_bamfile_size = 0
+
+        if new_bamfile_size <= bamfile_size:
+            continue
+        else:
+            print(
+                f"Moving incomplete file {abs_path} to {new_abs_path}...",
+                file=sys.stderr,
+            )
+
             try:
                 shutil.move(abs_path, new_abs_path)
             except FileNotFoundError:
@@ -35,7 +57,21 @@ def move_incomplete_files(
         "Incomplete files found:", list(incomplete_file_paths.keys()), file=sys.stderr
     )
 
+    fh.close()
     return incomplete_file_paths
+
+
+def get_rebasecall_params(wc, input, incomplete_files, *, dry_run: bool):
+    if input.rebasecall_file:
+        return f"--resume-from {input.rebasecall_file}"
+    elif dry_run:
+        incomplete_file = incomplete_files.get(expand_path(wc, READS_FILE))
+        if not incomplete_file:
+            return ""
+
+        return f"--resume-from {incomplete_file}"
+    else:
+        return ""
 
 
 def get_run_dir_wcs(rgx_dir_pattern: str) -> tuple[list[str], list[str], list[str]]:
