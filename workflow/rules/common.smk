@@ -40,7 +40,7 @@ def move_incomplete_files(
         except FileNotFoundError:
             new_bamfile_size = 0
 
-        if new_bamfile_size <= bamfile_size:
+        if new_bamfile_size >= bamfile_size:
             continue
         else:
             print(
