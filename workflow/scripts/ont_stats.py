@@ -57,140 +57,90 @@ def kb_formatter(x, pos):
     return f"{int(x / 1000)} kbp"
 
 
-def load_sum_hist(len_list=None, bins=None):
+def load_sum_hist(ordered_lengths=None, bins=None, bin_size=10_000):
     bin_df = pd.DataFrame({"BIN": bins})
-    bin_df["BIN"] = bin_df.apply(lambda x: x // BIN_SIZE)
-    len_df = pd.DataFrame({"SUM": len_list})
-    len_df["BIN"] = len_df["SUM"].apply(lambda x: x // BIN_SIZE)
+    bin_df["BIN"] = bin_df.apply(lambda x: x // bin_size)
+    len_df = pd.DataFrame({"SUM": ordered_lengths})
+    len_df["BIN"] = len_df["SUM"].apply(lambda x: x // bin_size)
     sum_len_df = len_df.groupby("BIN").sum()
     sum_hist = pd.merge(bin_df, sum_len_df, on="BIN", how="left").fillna(0)
     return sum_hist
 
 
-parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+def cli() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument(
-    "bams",
-    nargs="+",
-    required=True,
-    help="Unmapped BAM files.",
-)
-parser.add_argument("--sm", "-s", default=None, help="Sample name.")
-parser.add_argument(
-    "--genome", "-g", type=float, required=False, help="Genome size in Gbp", default=3.1
-)
-parser.add_argument(
-    "--outfile",
-    "-o",
-    type=argparse.FileType("at"),
-    required=False,
-    help="Output file to write to",
-    default=sys.stdout,
-)
-parser.add_argument(
-    "--tab",
-    "-t",
-    required=False,
-    action="store_true",
-    help="Output information in a tab-delimited format",
-)
-parser.add_argument(
-    "--plot",
-    "-p",
-    type=str,
-    required=False,
-    help="Plot the read length distribution and save to the provided argument",
-)
-parser.add_argument(
-    "--log",
-    "-l",
-    required=False,
-    action="store_true",
-    default=False,
-    help="Plot the read length distribution on a log scale",
-)
-parser.add_argument(
-    "--length_limit",
-    "-x",
-    type=int,
-    required=False,
-    help="Limit of the read length to be displayed on the plot",
-)
-parser.add_argument(
-    "--cumulative",
-    "-u",
-    required=False,
-    action="store_true",
-    default=False,
-    help="Plot the cumulative sum of base pairs by read length",
-)
-parser.add_argument(
-    "--window",
-    "-w",
-    required=False,
-    type=int,
-    default=10000,
-    help="Read length window size for plotting bins",
-)
-parser.add_argument(
-    "--plot_type", choices=["original", "cdf"], default="cdf", help="Plot type."
-)
-args = parser.parse_args()
+    parser.add_argument(
+        "bams",
+        nargs="+",
+        type=str,
+        help="Unmapped BAM files.",
+    )
+    parser.add_argument("--sample", "-s", default=None, help="Sample name.")
+    parser.add_argument(
+        "--genome", "-g", type=float, required=False, help="Genome size in Gbp", default=3.1
+    )
+    parser.add_argument(
+        "--outfile",
+        "-o",
+        type=argparse.FileType("at"),
+        required=False,
+        help="Output file to write to",
+        default=sys.stdout,
+    )
+    parser.add_argument(
+        "--plot",
+        "-p",
+        type=str,
+        required=False,
+        help="Plot the read length distribution and save to the provided argument",
+    )
+    parser.add_argument(
+        "--log",
+        "-l",
+        required=False,
+        action="store_true",
+        default=False,
+        help="Plot the read length distribution on a log scale",
+    )
+    parser.add_argument(
+        "--length_limit",
+        "-x",
+        type=int,
+        required=False,
+        help="Limit of the read length to be displayed on the plot",
+    )
+    parser.add_argument(
+        "--cumulative",
+        "-u",
+        required=False,
+        action="store_true",
+        default=False,
+        help="Plot the cumulative sum of base pairs by read length",
+    )
+    parser.add_argument(
+        "--window",
+        "-w",
+        required=False,
+        type=int,
+        default=10000,
+        help="Read length window size for plotting bins",
+    )
+    parser.add_argument(
+        "--plot_type", choices=["original", "cdf"], default="cdf", help="Plot type."
+    )
+    parser.add_argument(
+        "--threads", "-t", type=int, help="Threads to read input bam file.", default=12 
+    )
+    return parser.parse_args()
 
-
-def read_bam(infile: str) -> Generator[tuple[str, int], None, None]:
-    with pysam.AlignmentFile(infile, check_sq=False) as bam:
+def read_bam(infile: str, threads: int) -> Generator[tuple[str, int], None, None]:
+    with pysam.AlignmentFile(infile, check_sq=False, threads=threads) as bam:
         for rec in bam.fetch(until_eof=True):
             if rec.is_unmapped or (not rec.is_secondary and not rec.is_supplementary):
                 yield rec.query_name, len(rec.query_sequence)
 
-
-lengths = np.array(length for bam in args.bams for _, length in read_bam(bam))
-
-if args.tab:
-    args.outfile.write("\t".join(OUTPUT_HEADER) + "\n")
-
-len_list = np.flip(np.sort(lengths))
-len_list_k = lengths[lengths >= 100_000]
-n50 = get_n50(len_list)
-
-coverage = np.sum(len_list) / (args.genome * 1_000_000_000)
-coverage_k = np.sum(len_list_k) / (args.genome * 1_000_000_000)
-
-sm = args.sample
-if not args.tab:
-    args.outfile.write(f"Sample: {sm}\n")
-    args.outfile.write(
-        "Coverage (X): {:,.2f}\n"
-        "Coverage 100k+ (X): {:,.2f}\n"
-        "N50 (kbp):   {:,.2f}\n"
-        "Reads:	 {:,.0f}\n".format(
-            coverage,
-            coverage_k,
-            n50,
-            len(len_list),
-        )
-    )
-else:
-    out_df = pd.DataFrame.from_dict(
-        dict(
-            zip(
-                OUTPUT_HEADER,
-                [
-                    [sm],
-                    [round(coverage, 2)],
-                    [round(coverage_k, 2)],
-                    [round(n50, 2)],
-                    [len(len_list)],
-                ],
-            )
-        )
-    )
-    out_df.to_csv(args.outfile, sep="\t", index=False, header=False, mode="a")
-
-if args.plot_dir:
-    os.makedirs(args.plot_dir, exist_ok=True)
-
+def draw_plot(lengths: np.ndarray, ordered_lengths: np.ndarray, args: argparse.Namespace):
     if args.plot_type == "cdf":
         sns.set(font_scale=3)
         sns.set_style("ticks")
@@ -231,7 +181,7 @@ if args.plot_dir:
         plt.tight_layout()
         plt.savefig(args.plot, bbox_inches="tight")
     else:
-        BIN_SIZE = args.window
+        bin_size = args.window
         fig, ax = plt.subplots()
 
         if args.log:
@@ -240,8 +190,8 @@ if args.plot_dir:
         else:
             ax.set_xlabel("Read Length")
 
-        bins = np.arange(0, max(len_list) + BIN_SIZE, BIN_SIZE)
-        sum_hist = load_sum_hist(len_list=len_list, bins=bins)[:-1]
+        bins = np.arange(0, max(ordered_lengths) + bin_size, bin_size)
+        sum_hist = load_sum_hist(ordered_lengths=ordered_lengths, bins=bins, bin_size=bin_size)[:-1]
 
         ax.xaxis.set_major_formatter(ticker.FuncFormatter(kb_formatter))
 
@@ -252,16 +202,52 @@ if args.plot_dir:
                 ax.set_xlim(max(bins), 0)
 
             cumulative_hist = np.cumsum(sum_hist[::-1])[::-1]
-            ax.bar(bins[:-1], cumulative_hist["SUM"], width=BIN_SIZE, align="edge")
+            ax.bar(bins[:-1], cumulative_hist["SUM"], width=bin_size, align="edge")
             ax.set_ylabel("Cumulative Sum of the Number of Bases")
             ax.yaxis.set_major_formatter(ticker.FuncFormatter(gb_formatter))
         else:
             if args.length_limit:
                 ax.set_xlim(0, args.length_limit)
 
-            ax.bar(bins[:-1], sum_hist["SUM"], width=BIN_SIZE, align="edge")
+            ax.bar(bins[:-1], sum_hist["SUM"], width=bin_size, align="edge")
             ax.set_ylabel("Sum of the Number of Bases")
             ax.yaxis.set_major_formatter(ticker.FuncFormatter(mb_formatter))
 
-        plt.title(sm)
+        plt.title(args.sample)
         plt.savefig(args.plot, bbox_inches="tight")
+
+
+def main():
+    args = cli()
+    threads = args.threads
+    lengths = np.array([length for bam in args.bams for _, length in read_bam(bam, threads=threads)])
+    ordered_lengths = np.flip(np.sort(lengths))
+    ordered_lengths_k = lengths[lengths >= 100_000]
+    n50 = get_n50(ordered_lengths)
+
+    coverage = np.sum(ordered_lengths) / (args.genome * 1_000_000_000)
+    coverage_k = np.sum(ordered_lengths_k) / (args.genome * 1_000_000_000)
+
+    sm = args.sample
+    args.outfile.write("\t".join(OUTPUT_HEADER) + "\n")
+    out_df = pd.DataFrame.from_dict(
+        dict(
+            zip(
+                OUTPUT_HEADER,
+                [
+                    [sm],
+                    [round(coverage, 2)],
+                    [round(coverage_k, 2)],
+                    [round(n50, 2)],
+                    [len(ordered_lengths)],
+                ],
+            )
+        )
+    )
+    out_df.to_csv(args.outfile, sep="\t", index=False, header=False, mode="a")
+
+    if args.plot:
+        draw_plot(lengths, ordered_lengths, args)
+
+if __name__ == "__main__":
+    raise SystemExit(main())

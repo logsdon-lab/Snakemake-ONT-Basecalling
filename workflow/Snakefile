@@ -88,11 +88,13 @@ rule generate_summary:
         marker_file=touch(os.path.join(OUTPUT_DIR, "basecalling.done")),
     log:
         "logs/dorado_basecaller/{run_dir}_{subrun_dir}_{flowcell}_summary.log",
+    threads:
+        24
     conda:
         "envs/tools.yaml"
     shell:
         """
-        python {input.script} {input.bam} -s {wildcards.run_dir} -t -o {output.tsv} -p {output.plot} 2> {log}
+        python {input.script} {input.bam} -s {wildcards.run_dir} -t {threads} -o {output.tsv} -p {output.plot} 2> {log}
         """
 
 
