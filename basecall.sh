@@ -26,4 +26,4 @@ snakemake -p \
 --rerun-triggers mtime \
 -c 256 $@
 
-rm "${incomplete_files_list}"
+rm -f "${incomplete_files_list}"

@@ -44,7 +44,6 @@ rule dorado_basecaller:
             OUTPUT_DIR,
             "{run_dir}.bam",
         ),
-        marker_file=touch(os.path.join(OUTPUT_DIR, "basecalling.done")),
     resources:
         devices=DEVICES,
     params:
@@ -70,6 +69,30 @@ rule dorado_basecaller:
             --device cuda:{resources.devices} \
             {params.rebasecall_file} \
             {input.pod5_directory} > {output.reads} 2> {log}
+        """
+
+
+rule generate_summary:
+    input:
+        script="workflow/scripts/ont_stats.py",
+        bam=rules.dorado_basecaller.output.reads,
+    output:
+        tsv=os.path.join(
+            OUTPUT_DIR,
+            "{run_dir}.tsv",
+        ),
+        plot=os.path.join(
+            OUTPUT_DIR,
+            "{run_dir}.pdf",
+        ),
+        marker_file=touch(os.path.join(OUTPUT_DIR, "basecalling.done")),
+    log:
+        "logs/dorado_basecaller/{run_dir}_{subrun_dir}_{flowcell}_summary.log",
+    conda:
+        "envs/tools.yaml"
+    shell:
+        """
+        python {input.script} {input.bam} -s {wildcards.run_dir} -t -o {output.tsv} -p {output.plot} 2> {log}
         """
 
 
@@ -119,6 +142,13 @@ rule all:
     input:
         expand(
             rules.dorado_basecaller.output,
+            zip,
+            run_dir=RUN_DIRS,
+            subrun_dir=SUBRUN_DIRS,
+            flowcell=FLOWCELL_DIRS,
+        ),
+        expand(
+            rules.generate_summary.output,
             zip,
             run_dir=RUN_DIRS,
             subrun_dir=SUBRUN_DIRS,
