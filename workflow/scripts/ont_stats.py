@@ -176,7 +176,12 @@ def draw_plot(lengths: np.ndarray, ordered_lengths: np.ndarray, args: argparse.N
         # plot
         plt.xticks(xts, xls)
         Gb = sum(lengths) / 1000000000
-        plt.xlabel("Length (kbp), Total Gb = {:.2f}".format(Gb))
+        Gb_100kbp = sum(lengths[lengths > 100_000]) / 1_000_000_000
+        plt.xlabel(
+            "Length (kbp), Total Gb = {:.2f}, Total Gb (> 100kbp) = {:.2f}".format(
+                Gb, Gb_100kbp
+            )
+        )
         plt.ylabel("Number of reads")
         plt.tight_layout()
         plt.savefig(args.plot, bbox_inches="tight")
