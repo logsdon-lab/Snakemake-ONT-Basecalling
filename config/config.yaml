@@ -10,6 +10,6 @@ dorado:
   bin: "/home/prom/bin/dorado"
   model: "sup"
   min_qscore: 10
-  modifications: "5mC_5hmC"
+  modifications: "5mCG_5hmCG"
   devices: "all"
   correct: false
