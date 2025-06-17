@@ -52,7 +52,7 @@ rule dorado_basecaller:
         ),
         recursive="--recursive",
         model=config["dorado"]["model"],
-        modifications=config["dorado"]["modifications"],
+        modifications=get_modifications,
         min_qscore=config["dorado"]["min_qscore"],
     # Only allow up to one process at a time.
     threads: workflow.cores

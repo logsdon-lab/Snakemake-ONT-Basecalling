@@ -110,3 +110,13 @@ def expand_path(wc, path: str):
     return expand(
         path, zip, run_dir=wc.run_dir, subrun_dir=wc.subrun_dir, flowcell=wc.flowcell
     )[0]
+
+def get_modifications(wc):
+    final_modification = config["dorado"]["modifications"]
+    
+    # Don't expect many.
+    for keyword, modification in config["dorado"].get("modifications_by_run_keyword", {}).items():
+        if keyword in wc.run_dir:
+            final_modification = modification
+
+    return final_modification

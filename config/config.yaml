@@ -11,5 +11,7 @@ dorado:
   model: "sup"
   min_qscore: 10
   modifications: "5mCG_5hmCG"
+  modifications_by_run_keyword:
+    DMLseq: 5mCG_5hmCG,6mA
   devices: "all"
   correct: false
