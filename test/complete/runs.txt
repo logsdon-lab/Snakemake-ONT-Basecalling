@@ -1,0 +1,4 @@
+20240312_nhp_GGO_ULK114_PC/no_sample/flowcell
+20240316_nhp_GGO_ULK114_FN/no_sample/flowcell
+20240314_nhp_GGO_ULK114_Phenol/no_sample/flowcell
+20240314_DMLseq_GGO_ULK114_Phenol/no_sample/flowcell

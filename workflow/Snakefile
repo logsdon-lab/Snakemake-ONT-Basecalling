@@ -1,8 +1,10 @@
 import os
 import re
 import sys
+import glob
 import time
 import shutil
+import hashlib
 
 
 configfile: "config/config.yaml"
@@ -85,16 +87,20 @@ rule generate_summary:
             OUTPUT_DIR,
             "{run_dir}.pdf",
         ),
+        # Output to both directory and checkpoint dir.
+        # We need to do this because if marker file is transferred before all pod5s (which happens often), we don't want to rebasecall.
         marker_file=touch(os.path.join(OUTPUT_DIR, "basecalling.done")),
+    params:
+        chkpt_file=create_chkpt_fname,
     log:
         "logs/dorado_basecaller/{run_dir}_{subrun_dir}_{flowcell}_summary.log",
-    threads:
-        24
+    threads: 24
     conda:
         "envs/tools.yaml"
     shell:
         """
         python {input.script} {input.bam} -s {wildcards.run_dir} -t {threads} -o {output.tsv} -p {output.plot} 2> {log}
+        touch {params.chkpt_file}
         """
 
 

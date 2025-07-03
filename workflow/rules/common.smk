@@ -1,3 +1,8 @@
+def create_run_hash(run_dir: str, subrun_dir: str, flowcell_dir: str) -> str:
+    run_str = f"{run_dir}_{subrun_dir}_{flowcell_dir}"
+    return hashlib.sha256(run_str.encode()).hexdigest()
+
+
 def move_incomplete_files(
     incomplete_files: str | None, *, is_dry_run: bool
 ) -> dict[str, str]:
@@ -77,12 +82,26 @@ def get_rebasecall_params(wc, input, incomplete_files, *, dry_run: bool):
 def get_run_dir_wcs(rgx_dir_pattern: str) -> tuple[list[str], list[str], list[str]]:
     # Walk through input directory check that regex pattern matches
     run_dirs, subrun_dirs, flowcell_dirs = [], [], []
+    completed_runs = set()
+
+    os.makedirs(CHKPT_DIR, exist_ok=True)
+    for file in glob.glob(os.path.join(CHKPT_DIR, "*.done")):
+        chkpt_hash, _ = os.path.splitext(os.path.basename(file))
+        completed_runs.add(chkpt_hash)
+
     for root, _, _ in os.walk(config["input_dir"]):
         mtch = re.search(rgx_dir_pattern, root)
         if not mtch:
             continue
 
         run_dir, subrun_dir, flowcell_dir = mtch.groups()
+        chkpt_hash = create_run_hash(run_dir, subrun_dir, flowcell_dir)
+        if chkpt_hash in completed_runs:
+            print(
+                f"Skipping completed run, {run_dir}_{subrun_dir}_{flowcell_dir}.",
+                file=sys.stderr,
+            )
+            continue
 
         abs_path_flowcell_dir = os.path.join(
             config["input_dir"], run_dir, subrun_dir, flowcell_dir
@@ -111,12 +130,20 @@ def expand_path(wc, path: str):
         path, zip, run_dir=wc.run_dir, subrun_dir=wc.subrun_dir, flowcell=wc.flowcell
     )[0]
 
+
 def get_modifications(wc):
     final_modification = config["dorado"]["modifications"]
-    
+
     # Don't expect many.
-    for keyword, modification in config["dorado"].get("modifications_by_run_keyword", {}).items():
+    for keyword, modification in (
+        config["dorado"].get("modifications_by_run_keyword", {}).items()
+    ):
         if keyword in wc.run_dir:
             final_modification = modification
 
     return final_modification
+
+
+def create_chkpt_fname(wc) -> str:
+    chkpt_hash = create_run_hash(wc.run_dir, wc.subrun_dir, wc.flowcell)
+    return os.path.join(CHKPT_DIR, f"{chkpt_hash}.done")

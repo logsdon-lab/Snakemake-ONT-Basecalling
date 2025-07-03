@@ -8,6 +8,7 @@ RGX_DIR_PATTERN = re.compile(
     )
 )
 
+CHKPT_DIR = config.get("run_chkpt_dir", "complete")
 OUTPUT_DIR = config["run_output_dir"]
 READS_FILE = os.path.join(
     OUTPUT_DIR,

@@ -4,6 +4,8 @@ run_dir_pattern: "20[2-9][0-9]{5}[^/]+"
 # Output dir with {input_dir}/{run_dir}/*/*/pod5/
 # Can use {run_dir}, {subrun_dir}, and {flowcell} wildcards.
 run_output_dir: "/data/{run_dir}/{subrun_dir}/{flowcell}/pod5/basecalling"
+# Directory for checkpoints. If contains sha256 hash of {run_dir}_{subrun_dir}_{flowcell}, skips it.
+run_chkpt_dir: "complete"
 
 # Dorado settings.
 dorado:

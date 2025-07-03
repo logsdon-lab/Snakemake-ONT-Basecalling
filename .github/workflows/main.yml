@@ -8,9 +8,16 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: snakemake
+    - name: Dry-run
       uses: snakemake/snakemake-github-action@v1.25.1
       with:
         directory: .
         snakefile: workflow/Snakefile
         args: "--configfile test/config/config.yaml -c 1 -np"
+
+    - name: Dry-run and skip checkpoints
+      uses: snakemake/snakemake-github-action@v1.25.1
+      with:
+        directory: .
+        snakefile: workflow/Snakefile
+        args: "--configfile test/config/config_chkpt.yaml -c 1 -np"
