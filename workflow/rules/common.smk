@@ -98,7 +98,7 @@ def get_run_dir_wcs(rgx_dir_pattern: str) -> tuple[list[str], list[str], list[st
         chkpt_hash = create_run_hash(run_dir, subrun_dir, flowcell_dir)
         if chkpt_hash in completed_runs:
             print(
-                f"Skipping completed run, {run_dir}_{subrun_dir}_{flowcell_dir}.",
+                f"Skipping completed run, {run_dir}_{subrun_dir}_{flowcell_dir} ({chkpt_hash}).",
                 file=sys.stderr,
             )
             continue
@@ -131,14 +131,14 @@ def expand_path(wc, path: str):
     )[0]
 
 
-def get_modifications(wc):
+def get_modifications(run_dir: str):
     final_modification = config["dorado"]["modifications"]
 
     # Don't expect many.
     for keyword, modification in (
         config["dorado"].get("modifications_by_run_keyword", {}).items()
     ):
-        if keyword in wc.run_dir:
+        if keyword in run_dir:
             final_modification = modification
 
     return final_modification
@@ -147,3 +147,17 @@ def get_modifications(wc):
 def create_chkpt_fname(wc) -> str:
     chkpt_hash = create_run_hash(wc.run_dir, wc.subrun_dir, wc.flowcell)
     return os.path.join(CHKPT_DIR, f"{chkpt_hash}.done")
+
+def get_kit_name_arg(run_dir: str) -> str:
+    final_kitname = ""
+    # Don't expect many.
+    for keyword, kitname in (
+        config["dorado"].get("kitname_by_run_keyword", {}).items()
+    ):
+        if keyword in run_dir:
+            final_kitname = kitname
+
+    if final_kitname:
+        return f"--kit-name {final_kitname}"
+    else:
+        return final_kitname

@@ -15,5 +15,8 @@ dorado:
   modifications: "5mCG_5hmCG"
   modifications_by_run_keyword:
     DMLseq: 5mCG_5hmCG,6mA
+  kitname_by_run_keyword:
+    RBK114: SQK-RBK114-24
+    NBD114: SQK-NBD114-24
   devices: "all"
   correct: false

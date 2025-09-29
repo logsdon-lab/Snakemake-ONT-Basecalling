@@ -30,7 +30,7 @@ wildcard_constraints:
 
 # Check status of run by doing dry-run. If non-zero and error msg contaings IncompleteOutputException, update config wiht rebasecall.
 # Then change params and output to include previous file.
-rule dorado_basecaller:
+checkpoint dorado_basecaller:
     input:
         dorado_bin=config["dorado"]["bin"],
         pod5_directory=os.path.join(
@@ -52,9 +52,10 @@ rule dorado_basecaller:
         rebasecall_file=lambda wc, input: get_rebasecall_params(
             wc, input, INCOMPLETE_FILES, dry_run=DRY_RUN
         ),
+        kit_name_arg=lambda wc: get_kit_name_arg(wc.run_dir),
         recursive="--recursive",
         model=config["dorado"]["model"],
-        modifications=get_modifications,
+        modifications=lambda wc: get_modifications(wc.run_dir),
         min_qscore=config["dorado"]["min_qscore"],
     # Only allow up to one process at a time.
     threads: workflow.cores
@@ -69,15 +70,48 @@ rule dorado_basecaller:
             {params.recursive} \
             --min-qscore {params.min_qscore} \
             --device cuda:{resources.devices} \
-            {params.rebasecall_file} \
+            {params.rebasecall_file} {params.kit_name_arg} \
             {input.pod5_directory} > {output.reads} 2> {log}
         """
+
+checkpoint dorado_demux:
+    input:
+        bam=rules.dorado_basecaller.output.reads,
+    output:
+        output_dir=os.path.join(
+            OUTPUT_DIR,
+            "{run_dir}",
+            "demux"
+        )
+    params:
+        kit_name_arg=get_kit_name_arg,
+    threads: workflow.cores
+    log:
+        "logs/dorado_demux/{run_dir}_{subrun_dir}_{flowcell}.log",
+    benchmark:
+        "benchmarks/dorado_demux/{run_dir}_{subrun_dir}_{flowcell}.tsv"
+    shell:
+        """
+        dorado demux --output-dir {output.output_dir} {params.kit_name_arg} --no-classify {input.bam} 2> {log}
+        """
+
+
+def bam_files(wc):
+    output_bam = checkpoints.dorado_basecaller.get(**wc).output
+    kit_name_arg = get_kit_name_arg(wc.run_dir)
+
+    if not kit_name_arg:
+        return output_bam
+    else:
+        demux_dir = checkpoints.dorado_demux.get(**wc).output[0]
+        # Only emit demultiplexed files.
+        return glob.glob(os.path.join(demux_dir, "*.bam"))
 
 
 rule generate_summary:
     input:
         script="workflow/scripts/ont_stats.py",
-        bam=rules.dorado_basecaller.output.reads,
+        bam=bam_files,
     output:
         tsv=os.path.join(
             OUTPUT_DIR,

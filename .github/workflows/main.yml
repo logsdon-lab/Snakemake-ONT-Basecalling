@@ -21,3 +21,10 @@ jobs:
         directory: .
         snakefile: workflow/Snakefile
         args: "--configfile test/config/config_chkpt.yaml -c 1 -np"
+
+    - name: Dry-run and test kit-names.
+      uses: snakemake/snakemake-github-action@v1.25.1
+      with:
+        directory: .
+        snakefile: workflow/Snakefile
+        args: "--configfile test/config/config_barcode.yaml -c 1 -np"
