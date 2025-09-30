@@ -78,13 +78,10 @@ checkpoint dorado_demux:
     input:
         bam=rules.dorado_basecaller.output.reads,
     output:
-        output_dir=os.path.join(
+        output_dir=directory(os.path.join(
             OUTPUT_DIR,
-            "{run_dir}",
-            "demux"
-        )
-    params:
-        kit_name_arg=get_kit_name_arg,
+            "demux_{run_dir}",
+        ))
     threads: workflow.cores
     log:
         "logs/dorado_demux/{run_dir}_{subrun_dir}_{flowcell}.log",
@@ -92,7 +89,7 @@ checkpoint dorado_demux:
         "benchmarks/dorado_demux/{run_dir}_{subrun_dir}_{flowcell}.tsv"
     shell:
         """
-        dorado demux --output-dir {output.output_dir} {params.kit_name_arg} --no-classify {input.bam} 2> {log}
+        dorado demux --output-dir {output.output_dir} --no-classify {input.bam} 2> {log}
         """
 
 
@@ -112,6 +109,11 @@ rule generate_summary:
     input:
         script="workflow/scripts/ont_stats.py",
         bam=bam_files,
+        demux_chkpt=lambda wc: (
+            rules.dorado_demux.output
+            if get_kit_name_arg(wc.run_dir)
+            else []
+        )
     output:
         tsv=os.path.join(
             OUTPUT_DIR,

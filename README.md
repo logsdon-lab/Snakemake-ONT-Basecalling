@@ -5,7 +5,7 @@ Basecalling ONT reads workflow using [`dorado`](https://github.com/nanoporetech/
 
 ### Features
 * Automatically detects and continues on incomplete files.
-* WIP
+* Generates summary plots.
 
 ### Requirements
 Requires a `dorado` executable.
