@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euo pipefail
+set -euox pipefail
 
 WD=$(dirname $0)
 
@@ -13,7 +13,7 @@ priority_list="${WD}/priority.txt"
 # Check that exists
 touch "${priority_list}"
 if [ -s "${priority_list}" ]; then
-    PRIORITIES="-P "
+    PRIORITIES="-P $(cat ${priority_list})"
 else
     PRIORITIES=""
 fi
