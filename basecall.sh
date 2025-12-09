@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euox pipefail
+set -euo pipefail
 
 WD=$(dirname $0)
 
@@ -12,11 +12,6 @@ priority_list="${WD}/priority.txt"
 
 # Check that exists
 touch "${priority_list}"
-if [ -s "${priority_list}" ]; then
-    PRIORITIES="-P $(cat ${priority_list})"
-else
-    PRIORITIES=""
-fi
 
 # Incomplete basecalling. Redo.
 if [ $ret -eq 0 ]; then
@@ -28,11 +23,28 @@ else
     echo "Basecalling reads."
 fi
 
+if [ -s "${priority_list}" ]; then
+    # Construct glob. Expects format: "/data/{run_dir}/{subrun_dir}/{flowcell}/pod5/basecalling"
+    # NOTE: This should check the configfile for the output format.
+    # This script should be rewritten to check at some point.
+    FILES_TO_PRIORITIZE=()
+    while read -r line; do
+        prun_dir="${line}";
+        for prun_basecall_dir in $(realpath /data/"${prun_dir}"/*/*/pod5/basecalling); do
+            FILES_TO_PRIORITIZE+=("${prun_basecall_dir}/${prun_dir}.bam")
+        done
+    done < "${priority_list}"
+    # --prioritize these BAM files.
+    PRIORITIES="-P ${FILES_TO_PRIORITIZE[@]}"
+else
+    PRIORITIES=""
+fi
+
 # Then pass as configuration.
+# Don't expand PRIORITIES var in case empty.
 snakemake -p \
 --config incomplete_files=$incomplete_files_list \
---keep-incomplete \
-"${PRIORITIES}" \
+--keep-incomplete ${PRIORITIES} \
 --use-conda \
 --rerun-incomplete \
 --rerun-triggers mtime \
