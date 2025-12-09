@@ -30,8 +30,8 @@ if [ -s "${priority_list}" ]; then
     FILES_TO_PRIORITIZE=()
     while read -r line; do
         prun_dir="${line}";
-        for prun_basecall_dir in $(realpath /data/"${prun_dir}"/*/*/pod5/basecalling); do
-            FILES_TO_PRIORITIZE+=("${prun_basecall_dir}/${prun_dir}.bam")
+        for prun_basecall_dir in $(realpath /data/"${prun_dir}"/*/*/pod5); do
+            FILES_TO_PRIORITIZE+=("${prun_basecall_dir}/basecalling/${prun_dir}.bam")
         done
     done < "${priority_list}"
     # --prioritize these BAM files.
