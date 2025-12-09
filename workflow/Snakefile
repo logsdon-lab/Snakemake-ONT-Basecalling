@@ -46,6 +46,11 @@ checkpoint dorado_basecaller:
             OUTPUT_DIR,
             "{run_dir}.bam",
         ),
+        # Ensure correctly compressed.
+        check=os.path.join(
+            OUTPUT_DIR,
+            "{run_dir}.quickcheck.txt",
+        ),
     resources:
         devices=DEVICES,
     params:
@@ -57,6 +62,8 @@ checkpoint dorado_basecaller:
         model=config["dorado"]["model"],
         modifications=lambda wc: get_modifications(wc.run_dir),
         min_qscore=config["dorado"]["min_qscore"],
+    conda:
+        "envs/tools.yaml"
     # Only allow up to one process at a time.
     threads: workflow.cores
     log:
@@ -72,6 +79,7 @@ checkpoint dorado_basecaller:
             --device cuda:{resources.devices} \
             {params.rebasecall_file} {params.kit_name_arg} \
             {input.pod5_directory} > {output.reads} 2> {log}
+        samtools quickcheck {output.reads} &> {output.check}
         """
 
 checkpoint dorado_demux:
@@ -94,7 +102,7 @@ checkpoint dorado_demux:
 
 
 def bam_files(wc):
-    output_bam = checkpoints.dorado_basecaller.get(**wc).output
+    output_bam = checkpoints.dorado_basecaller.get(**wc).output.reads
     kit_name_arg = get_kit_name_arg(wc.run_dir)
 
     if not kit_name_arg:

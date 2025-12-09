@@ -9,7 +9,7 @@ run_chkpt_dir: "complete"
 
 # Dorado settings.
 dorado:
-  bin: "/home/prom/bin/dorado"
+  bin: "/opt/logsdon_lab/dorado-1.1.1-linux-x64/bin/dorado"
   model: "sup"
   min_qscore: 10
   modifications: "5mCG_5hmCG"
