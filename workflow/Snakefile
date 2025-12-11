@@ -20,6 +20,8 @@ INCOMPLETE_FILES = move_incomplete_files(
 )
 RUN_DIRS, SUBRUN_DIRS, FLOWCELL_DIRS = get_run_dir_wcs(rgx_dir_pattern=RGX_DIR_PATTERN)
 DEVICES = config["dorado"].get("devices", "all")
+DUPLEX = config["dorado"].get("duplex", False)
+CORRECT = config["dorado"].get("correct", False)
 
 
 wildcard_constraints:
@@ -57,6 +59,7 @@ checkpoint dorado_basecaller:
         rebasecall_file=lambda wc, input: get_rebasecall_params(
             wc, input, INCOMPLETE_FILES, dry_run=DRY_RUN
         ),
+        command="duplex" if DUPLEX else "basecaller",
         kit_name_arg=lambda wc: get_kit_name_arg(wc.run_dir),
         recursive="--recursive",
         model=config["dorado"]["model"],
@@ -72,7 +75,7 @@ checkpoint dorado_basecaller:
         "benchmarks/dorado_basecaller/{run_dir}_{subrun_dir}_{flowcell}.tsv"
     shell:
         """
-        {input.dorado_bin} basecaller \
+        {input.dorado_bin} {params.command} \
             {params.model},{params.modifications} \
             {params.recursive} \
             --min-qscore {params.min_qscore} \
@@ -83,14 +86,17 @@ checkpoint dorado_basecaller:
         samtools quickcheck -u {output.reads} &>> {output.log}
         """
 
+
 checkpoint dorado_demux:
     input:
         bam=rules.dorado_basecaller.output.reads,
     output:
-        output_dir=directory(os.path.join(
-            OUTPUT_DIR,
-            "demux_{run_dir}",
-        ))
+        output_dir=directory(
+            os.path.join(
+                OUTPUT_DIR,
+                "demux_{run_dir}",
+            )
+        ),
     threads: workflow.cores
     log:
         "logs/dorado_demux/{run_dir}_{subrun_dir}_{flowcell}.log",
@@ -102,11 +108,38 @@ checkpoint dorado_demux:
         """
 
 
+checkpoint split_duplex_reads:
+    input:
+        bam=rules.dorado_basecaller.output.reads,
+    output:
+        duplex_reads=os.path.join(
+            OUTPUT_DIR,
+            "{run_dir}_duplex.bam",
+        ),
+        simplex_reads=os.path.join(
+            OUTPUT_DIR,
+            "{run_dir}_simplex.bam",
+        ),
+    log:
+        "logs/dorado_basecaller/split_duplex_{run_dir}_{subrun_dir}_{flowcell}.log",
+    benchmark:
+        "benchmarks/dorado_basecaller/split_duplex_{run_dir}_{subrun_dir}_{flowcell}.tsv"
+    conda:
+        "envs/tools.yaml"
+    shell:
+        """
+        samtools view -b -h -d dx:1 {input.bam} > {output.duplex_reads}
+        samtools view -b -h -d dx:0 {input.bam} > {output.simplex_reads}
+        """
+
+
 def bam_files(wc):
     output_bam = checkpoints.dorado_basecaller.get(**wc).output.reads
     kit_name_arg = get_kit_name_arg(wc.run_dir)
 
-    if not kit_name_arg:
+    if DUPLEX:
+        return checkpoints.split_duplex_reads.get(**wc).output
+    elif not kit_name_arg:
         return output_bam
     else:
         demux_dir = checkpoints.dorado_demux.get(**wc).output[0]
@@ -119,10 +152,8 @@ rule generate_summary:
         script="workflow/scripts/ont_stats.py",
         bam=bam_files,
         demux_chkpt=lambda wc: (
-            rules.dorado_demux.output
-            if get_kit_name_arg(wc.run_dir)
-            else []
-        )
+            rules.dorado_demux.output if get_kit_name_arg(wc.run_dir) else []
+        ),
     output:
         tsv=os.path.join(
             OUTPUT_DIR,
@@ -215,7 +246,18 @@ rule all:
                 subrun_dir=SUBRUN_DIRS,
                 flowcell=FLOWCELL_DIRS,
             )
-            if config["dorado"]["correct"]
+            if CORRECT
+            else []
+        ),
+        (
+            expand(
+                rules.split_duplex_reads.output,
+                zip,
+                run_dir=RUN_DIRS,
+                subrun_dir=SUBRUN_DIRS,
+                flowcell=FLOWCELL_DIRS,
+            )
+            if DUPLEX
             else []
         ),
     default_target: True
