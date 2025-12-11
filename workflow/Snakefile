@@ -47,12 +47,12 @@ checkpoint dorado_basecaller:
             "{run_dir}.bam",
         ),
         # Ensure correctly compressed.
-        check=os.path.join(
+        log=os.path.join(
             OUTPUT_DIR,
-            "{run_dir}.quickcheck.txt",
+            "{run_dir}.log",
         ),
     resources:
-        devices=DEVICES,
+        devices=lambda wc, attempt: try_lower_devices(wc, attempt, default=DEVICES),
     params:
         rebasecall_file=lambda wc, input: get_rebasecall_params(
             wc, input, INCOMPLETE_FILES, dry_run=DRY_RUN
@@ -79,7 +79,8 @@ checkpoint dorado_basecaller:
             --device cuda:{resources.devices} \
             {params.rebasecall_file} {params.kit_name_arg} \
             {input.pod5_directory} > {output.reads} 2> {log}
-        samtools quickcheck {output.reads} &> {output.check}
+        cp {log} {output.log}
+        samtools quickcheck -u {output.reads} &>> {output.log}
         """
 
 checkpoint dorado_demux:

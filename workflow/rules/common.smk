@@ -161,3 +161,14 @@ def get_kit_name_arg(run_dir: str) -> str:
         return f"--kit-name {final_kitname}"
     else:
         return final_kitname
+
+def try_lower_devices(wc, attempt, *, default: str = "all") -> str:
+    if attempt == 1:
+        return default
+    # 4 GPUs starting from zero index.
+    # Drop number per attempt 
+    N_GPU = 4
+    retry_n_gpu = N_GPU-attempt-1
+    if retry_n_gpu < 1:
+        raise RuntimeError("GPU usage at maximum. Retry basecalling later.")
+    return ",".join(str(i) for i in range(retry_n_gpu))
